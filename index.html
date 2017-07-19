@@ -3,14 +3,32 @@
 	<meta charset="UTF-8">
 	<title>Electronic life</title>
 	<style>
-		
+
 	</style>
 </head>
 <body>
 
-    </div>
+
+
     <script type="text/javascript" src="js/world.js"></script>
     <script type="text/javascript" src="js/entities.js"></script>
     <script type="text/javascript" src="js/common.js"></script>
+		<script>
+		
+		animateWorld(new World(
+		  ["############",
+		   "#     #    #",
+		   "#   ~    ~ #",
+		   "#  ##      #",
+		   "#  ##  o####",
+		   "#          #",
+		   "############"],
+		  {"#": Wall,
+		   "~": WallFollower,
+		   "o": BouncingCritter}
+		));
+
+		</script>;
+
 </body>
 </html>
