@@ -1,3 +1,6 @@
+
+//1. Define a plan of the world, each grid using one char per square
+
 var plan = ["############################",
             "#      #    #      o      ##",
             "#                          #",
@@ -11,7 +14,7 @@ var plan = ["############################",
             "#    #                     #",
             "############################"];
 
-
+//2. make a function so we can track our x and y coordonates
 function Vector(x, y) {
   this.x = x;
   this.y = y;
@@ -19,10 +22,13 @@ function Vector(x, y) {
 Vector.prototype.plus = function(other) {
   return new Vector(this.x + other.x, this.y+ other.y)
 };
+
+//3. Store grid values
 var grid = [
   ["top left", "top middle", "top right"],
   ["bottom left", "bottom middle", "bottom right"]
 ];
+//4. Define grid object
 
 function Grid(width, height) {
   this.space = new Array(width * height);
@@ -50,7 +56,7 @@ Grid.prototype.forEach = function(f, context){
     }
   }
 }
-
+//5. Create object for direction names
 var directions = {
   "n":  new Vector( 0, -1),
   "ne": new Vector( 1, -1),
@@ -61,7 +67,7 @@ var directions = {
   "w":  new Vector(-1,  0),
   "nw": new Vector(-1, -1)
 };
-
+//6. create a random function that we can use
 function randomElement(array) {
   return array[Math.floor(Math.random() * array.length)];
 }
@@ -77,6 +83,8 @@ BouncingCritter.prototype.act = function(view) {
   }
   return {type: "move", direction: this.direction};
 }
+
+
 
 function elementFromChar(legend, ch) {
   if(ch == " "){
@@ -205,4 +213,153 @@ WallFollower.prototype.act = function(view) {
     if(this.dir == start) break;
   }
   return {type: "move", direction: this.dir};
+}
+
+function LifelikeWorld(map, legend) {
+  World.call(this, map, legend);
+}
+LifelikeWorld.prototype = Object.create(World.prototype);
+
+var actionTypes = Object.create(null);
+
+LifelikeWorld.prototype.letAct = function(critter, vector) {
+  var action = critter.act(new View(this, vector));
+  var handled = action &&
+    action.type in actionTypes &&
+    actionTypes[action.type].call(this, critter, vector, action);
+
+  if(!handled) {
+    critter.energy -= 0.2;
+    if(critter.energy <= 0){
+      this.grid.set(vector, null);
+    }
+  }
+};
+
+actionTypes.grow = function(critter) {
+  critter.energy += 0.5;
+  return true;
+}
+
+actionTypes.move = function(critter, vector, action) {
+  var dest = this.checkDestination(action, vector);
+  if(dest == null ||
+      critter.energy <=1 ||
+      this.grid.get(dest) != null){
+        return false;
+      }
+  critter.energy -=1;
+  this.grid.set(vector, null);
+  this.grid.set(dest, critter);
+  return true;
+};
+
+actionTypes.eat = function(critter, vector, action) {
+  var dest = this.checkDestination(action, vector);
+  var atDest = dest !=null && this.grid.get(dest);
+  if(!atDest || atDest.energy == null){
+    return false;
+  }
+  critter.energy += atDest.energy;
+  this.grid.set(dest, null);
+  return true;
+};
+
+actionTypes.reproduce = function(critter, vector, action) {
+  var baby = elementFromChar(this.legend, critter.originChar);
+  var dest = this.checkDestination(action, vector);
+  if(dest == null ||
+    critter.energy <= 2 * baby.energy ||
+    this.grid.get(dest) != null){
+      return false;
+    }
+  critter.energy -= 2 * baby.energy;
+  this.grid.set(dest, baby);
+  return true;
+};
+
+function Plant() {
+  this.energy = 3 + Math.random() * 4;
+}
+
+Plant.prototype.act = function(view) {
+  if(this.energy > 15) {
+    var space = view.find(" ");
+    if(space){
+      return {type: "reproduce", direction: space};
+    }
+  }
+  if(this.energy <20){
+    return {type: "grow"};
+  }
+}
+
+function PlantEater() {
+  this.energy = 20;
+}
+
+PlantEater.prototype.act = function (view) {
+  var space = view.find(" ");
+  if(this.energy > 60 && space){
+    return {type: "reproduce", direction: space};
+  }
+  var plant = view.find("*");
+  if(plant) {
+    return {type: "eat", direction: plant};
+  }
+  if(space){
+    return {type: "move", direction: space};
+  }
+}
+
+function SmartPlantEater() {
+  this.energy = 30;
+  this.direction = "e";
+}
+
+SmartPlantEater.prototype.act = function(view){
+  var space = view.find(" ");
+  if(this.energy > 90 && space){
+    return {type: "reproduce", direction: space};
+  }
+  var plants = view.findAll("*");
+  if(plants.length > 1){
+    return {type: "eat", direction: randomElement(plants)};
+  }
+  if(view.look(this.direction) != " " && space){
+    this.direction = space;
+  }
+  return {type: "move", direction: this.direction};
+}
+
+function Tiger() {
+  this.energy = 100;
+  this.direction = "w";
+  //Used to track the amount of prey seen per turn in the last six turn
+  this.preySeen = [];
+}
+
+Tiger.prototype.act = function(view) {
+  //Average number of prey seen per turn
+  var seenPerTurn = this.preySeen.reduce(function(a, b) {
+    return a + b
+  }, 0) / this.preySeen.length;
+  var prey = view.findAll("O");
+  this.preySeen.push(prey.length);
+  //Drop the dirst element from the array when it is longer than 6
+  if(this.preySeen.length > 6){
+    this.preySeen.shift();
+  }
+  //Only eat if the predator saw more than 1/4 prey animal per turn
+  if(prey.length && seenPerTurn > 0.25){
+    return {type: "eat", direction: randomElement(prey)};
+  }
+  var space = view.find(" ");
+  if(this.energy > 400 && space){
+    return {type: "reproduce", direction: space};
+  }
+  if(view.look(this.direction) != " " && space){
+    this.direction = space;
+  }
+  return {type: "move", direction: this.direction};
 }
